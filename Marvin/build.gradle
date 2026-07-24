@@ -1,38 +1,12 @@
 /*
- * ##############################################################################
- * #  Copyright (c) 2024 by Patrick Kutch https://github.com/PatrickKutch
- * # 
- * # Licensed under the Apache License, Version 2.0 (the "License");
- * #  you may not use this file except in compliance with the License.
- * #  You may obtain a copy of the License at
- * # 
- * #      http://www.apache.org/licenses/LICENSE-2.0
- * # 
- * #  Unless required by applicable law or agreed to in writing, software
- * #  distributed under the License is distributed on an "AS IS" BASIS,
- * #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * #  See the License for the specific language governing permissions and
- * #  limitations under the License.
- * ##############################################################################
- * #    File Abstract: 
- * #    Gradle build file for the Marvin JAVA application, Java 11 Builds a monolithic Jar
- * #
- * #	Steps to build:
- * #	gradlew buildEnzo
- * #	gradlew copyEnzoJar
- * #	gradlew build
- * #
- * #    or 
- * #	gradlew buildDeps
- * #	gradlew build
- * ##############################################################################
+ * Modern Gradle build file for Marvin JavaFX (Java 21, Gradle 8/9)
  */
 import java.text.SimpleDateFormat
 import java.util.Properties
 
 plugins {
     id 'application'
-    id 'org.openjfx.javafxplugin' version '0.0.13'
+    id 'org.openjfx.javafxplugin' version '0.1.0'
     id 'java'
     id 'idea'
 }
@@ -41,31 +15,37 @@ repositories {
     mavenCentral()
 }
 
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
 javafx {
-    version = "12"
-    modules = [ 'javafx.controls', 'javafx.web', 'javafx.media', 'javafx.swing', 'javafx.graphics', 'javafx.base']
+    version = "21.0.3"
+    modules = ['javafx.controls', 'javafx.web', 'javafx.media', 'javafx.swing', 'javafx.graphics', 'javafx.base']
 }
 
 dependencies {
-    implementation files('Dependencies/Enzo-0.3.6a.jar') // Using the Enzo JAR from the Dependencies folder
+    // Uses the Enzo JAR compiled by the buildDeps task
+    implementation files('Dependencies/Enzo-0.3.6a.jar')
 }
-mainClassName = 'kutch.biff.marvin.Launcher'
 
-// Load and update version properties from the Marvin.version.properties file
+application {
+    mainClass = 'kutch.biff.marvin.Launcher'
+}
+
 def versionPropsFile = file('src/main/resources/kutch/biff/marvin/version/Marvin.version.properties')
 def versionProps = new Properties()
 
-task updateVersionProperties {
+tasks.register('updateVersionProperties') {
     doLast {
         if (project.hasProperty('updateReleaseInfo')) {
             if (versionPropsFile.exists()) {
-                versionProps.load(new FileInputStream(versionPropsFile))
+                versionPropsFile.withInputStream { stream -> versionProps.load(stream) }
 
-                // Increment the build version
                 def buildVersion = versionProps['Build_Version'].toInteger() + 1
                 versionProps['Build_Version'] = buildVersion.toString()
 
-                // Update the date information
                 Date currentDate = new Date()
                 def buildDate = new SimpleDateFormat('yyyy-MM-dd').format(currentDate)
                 def buildTime = new SimpleDateFormat('HH:mm:ss.SSSZ').format(currentDate)
@@ -74,13 +54,11 @@ task updateVersionProperties {
                 versionProps['Month_Version'] = new SimpleDateFormat('MM').format(currentDate)
                 versionProps['Day_Version'] = new SimpleDateFormat('dd').format(currentDate)
 
-                // Set DEBUG property based on the build type
                 def isDebugBuild = project.hasProperty('debugBuild')
                 versionProps['DEBUG'] = isDebugBuild ? 'true' : 'false'
-                // Save the updated properties back to the file
-                versionProps.store(new FileOutputStream(versionPropsFile), null)
 
-                // Set the properties in the project.ext to make them accessible in other tasks
+                versionPropsFile.withOutputStream { stream -> versionProps.store(stream, null) }
+
                 project.ext.set('buildVersion', versionProps['Build_Version'])
                 project.ext.set('releaseType', versionProps['Release'])
                 project.ext.set('versionDate', versionProps['Date'])
@@ -92,9 +70,6 @@ task updateVersionProperties {
                 throw new GradleException("Version properties file not found: ${versionPropsFile}")
             }
         } else {
-            println "Skipping version update as 'updateReleaseInfo' property is not set."
-
-            // Set default values to avoid missing property errors
             project.ext.set('buildVersion', versionProps['Build_Version'] ?: '0')
             project.ext.set('releaseType', versionProps['Release'] ?: 'Unknown')
             project.ext.set('versionDate', versionProps['Date'] ?: 'Unknown')
@@ -104,117 +79,75 @@ task updateVersionProperties {
     }
 }
 
-// Ensure the updateVersionProperties task runs before the jar task
 jar {
-    dependsOn updateVersionProperties
+    dependsOn tasks.named('updateVersionProperties')
 
-    baseName = 'BIFF.Marvin'
+    archiveBaseName = 'BIFF.Marvin'
+    archiveFileName = 'BIFF.Marvin.jar'
 
     doFirst {
-        // Collect all the manifest attributes into a map
-        def manifestAttributes = [
-            'Main-Class'           : mainClassName,
-            'Built-By'             : System.properties['user.name'],
-            'Created-By'           : System.properties['java.version'] + " (" + System.properties['java.vendor'] + " " + System.properties['java.vm.version'] + ")",
-            'Build-Date'           : "${project.ext.buildDate}",
-            'Build-Time'           : "${project.ext.buildTime}",
-            'Specification-Title'  : project.name,
-            'Specification-Version': "${project.ext.buildVersion}",
-            'Implementation-Title' : project.name,
-            'Implementation-Version': "${project.ext.buildVersion}",
-            'Bundle-Name'          : project.name,
-            'Bundle-License'       : 'https://www.apache.org/licenses/LICENSE-2.0',
-            'Bundle-Description'   : 'BIFF Marvin',
-            'Bundle-SymbolicName'  : 'kutch.biff.marvin.Marvin',
-            'Automatic-Module-Name': 'kutch.biff.marvin.Marvin',
-            'Release-Type'         : "${project.ext.releaseType}",
-            'Version-Date'         : "${project.ext.versionDate}"
-        ]
-
-        // Set the manifest attributes
         manifest {
-            attributes(manifestAttributes)
+            attributes([
+                'Main-Class'           : application.mainClass.get(),
+                'Built-By'             : System.properties['user.name'],
+                'Created-By'           : "${System.properties['java.version']} (${System.properties['java.vendor']} ${System.properties['java.vm.version']})",
+                'Build-Date'           : "${project.ext.buildDate}",
+                'Build-Time'           : "${project.ext.buildTime}",
+                'Specification-Title'  : project.name,
+                'Specification-Version': "${project.ext.buildVersion}",
+                'Implementation-Title' : project.name,
+                'Implementation-Version': "${project.ext.buildVersion}",
+                'Bundle-Name'          : project.name,
+                'Bundle-License'       : 'https://www.apache.org/licenses/LICENSE-2.0',
+                'Bundle-Description'   : 'BIFF Marvin',
+                'Bundle-SymbolicName'  : 'kutch.biff.marvin.Marvin',
+                'Automatic-Module-Name': 'kutch.biff.marvin.Marvin',
+                'Release-Type'         : "${project.ext.releaseType}",
+                'Version-Date'         : "${project.ext.versionDate}"
+            ])
         }
     }
 
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE // Handle duplicate entries
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
     from {
-        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } // Include dependencies, including Enzo
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
     }
 
     with copySpec {
-        from sourceSets.main.output // Include Marvin's compiled classes and resources
+        from sourceSets.main.output
     }
 }
 
-tasks.withType(JavaCompile) {
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
     options.debug = project.hasProperty('debugBuild')
-    if (options.debug) {
-        options.debugOptions.debugLevel = 'source,lines,vars'
-        println ">>>>> DEBUG mode enabled for Java compilation <<<<<"
-    } else {
-        println ">>>>> DEBUG mode disabled for Java compilation <<<<<"
-    }
 }
 
 // Task to build the Enzo library
-task buildEnzo(type: GradleBuild) {
+tasks.register('buildEnzo', GradleBuild) { task ->
     println "-------- Building ENZO Library ---------"
-    buildFile = "Dependencies/Enzo/build.gradle"
-    tasks = ['build']
+    task.dir = file("Dependencies/Enzo")
+    task.tasks = ['oneJar']
 }
 
 // Task to copy the built Enzo JAR into the Dependencies folder
-task copyEnzoJar(type: Copy) {
+tasks.register('copyEnzoJar', Copy) {
     println "-------- Copying ENZO Library ---------"
     from 'Dependencies/Enzo/build/libs'
-    include '*.jar'
+    include 'Enzo*.jar'
     into 'Dependencies'
+    rename { 'Enzo-0.3.6a.jar' }
 }
 
-copyEnzoJar.mustRunAfter buildEnzo
-
-// Ensure updateVersionProperties runs before any build
-tasks.build.dependsOn updateVersionProperties
-
-// Create a task that depends on buildEnzo, copyEnzoJar, and build Marvin
-task buildDeps {
-    dependsOn buildEnzo, copyEnzoJar
+tasks.named('copyEnzoJar').configure {
+    mustRunAfter tasks.named('buildEnzo')
 }
 
-task runJar(type: JavaExec) {
-    group = 'application'
-    description = 'Run the application from the JAR file.'
-    main = '-jar'
-    args = ['build/libs/BIFF.Marvin.jar']
-
-    doFirst {
-        if (project.hasProperty('appArgs')) {
-            project.appArgs.split(' ').each { arg ->
-                args += arg
-            }
-        }
-        println "Running JAR: ${workingDir} java ${args}"
-    }
+tasks.named('build').configure {
+    dependsOn tasks.named('updateVersionProperties')
 }
 
-task debugJar(type: JavaExec) {
-    group = 'application'
-    description = 'Run the application from the JAR file with debugging enabled.'
-
-    main = '-jar'
-    args = ['build/libs/BIFF.Marvin.jar']
-
-    // JVM arguments to enable debugging on port 5005
-    jvmArgs = ['-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005']
-
-    doFirst {
-        if (project.hasProperty('appArgs')) {
-            project.appArgs.split(' ').each { arg ->
-                args += arg
-            }
-        }
-        println "Running in debug mode: ${workingDir} java ${jvmArgs} ${args}"
-    }
+tasks.register('buildDeps') {
+    dependsOn tasks.named('buildEnzo'), tasks.named('copyEnzoJar')
 }

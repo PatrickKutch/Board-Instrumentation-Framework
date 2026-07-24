@@ -15,29 +15,37 @@
  */
 
 // Charts
-/* Updated by Patrick Kutch to accomidate Java 11 */
+/*
+ * Copyright (c) 2015 by Gerrit Grunwald
+ * Updated by Patrick Kutch for Java 21 & Gradle 8/9 compatibility
+ */
+
 plugins {
-	id 'org.openjfx.javafxplugin'
-    id 'java'
+    id 'java-library'
+    id 'application'
+    id 'org.openjfx.javafxplugin'
 }
 
-
 repositories {
-    // Use jcenter for resolving your dependencies.
-    // You can declare any Maven/Ivy/file repository here.
-    jcenter()
-	mavenCentral()
+    mavenCentral()
 }
 
 javafx {
-    version = "11"
+    version = "21.0.3"
     modules = [ 'javafx.controls' ]
 }
 
-apply plugin: 'application'
-
-mainClassName = 'eu.hansolo.enzo.charts.DemoSimpleRadarChart'
+application {
+    mainClass = 'eu.hansolo.enzo.charts.DemoSimpleRadarChart'
+}
 
 dependencies {
     implementation project(':Common'), project(':Fonts')
+}
+sourceSets {
+    main {
+        resources {
+            srcDirs = ['src/main/resources', 'src/main/java']
+        }
+    }
 }

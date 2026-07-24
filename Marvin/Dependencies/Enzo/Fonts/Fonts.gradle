@@ -18,19 +18,25 @@
 /* Updated by Patrick Kutch to accomidate Java 11 */
 plugins {
 	id 'org.openjfx.javafxplugin'
-    id 'java'
+    id 'java-library'
 }
 
 
 repositories {
-    // Use jcenter for resolving your dependencies.
+
     // You can declare any Maven/Ivy/file repository here.
-    jcenter()
 	mavenCentral()
 }
 
 javafx {
-    version = "11"
+    version = "21.0.3"
     modules = [ 'javafx.controls' ]
 }
 
+sourceSets {
+    main {
+        resources {
+            srcDirs = ['src/main/resources', 'src/main/java']
+        }
+    }
+}

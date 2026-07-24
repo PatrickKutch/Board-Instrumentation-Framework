@@ -1,54 +1,50 @@
 /*
  * Copyright (c) 2015 by Gerrit Grunwald
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Updates for Java 21 & Gradle 8/9 compatibility
  */
-// Updates by Patrick Kutch to accomidate newer versions of Java and Gradle
-// Enzo main build file
 import java.text.SimpleDateFormat
 
 plugins {
     id 'java-library'
-    id 'org.openjfx.javafxplugin' version '0.0.13'
-    id 'idea'
-    id 'signing'
+    id 'org.openjfx.javafxplugin' version '0.1.0' apply false
 }
 
-sourceCompatibility = '11'
-version = '0.3.6a' // Manually specified project version
+version = '0.3.6a'
 
-wrapper {
-    gradleVersion = '7.6'
-}
+subprojects {
+    apply plugin: 'java-library'
+    apply plugin: 'org.openjfx.javafxplugin'
 
-repositories {
-    mavenCentral()
-    gradlePluginPortal() // Ensure the plugin portal is included for resolving plugins
-}
+    java {
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
+    }
 
-apply plugin: 'idea'
-apply plugin: 'signing'
+    repositories {
+        mavenCentral()
+    }
 
-// Apply settings for signing if available
-if (file("signing.properties").exists()) {
-    Properties props = new Properties()
-    props.load(new FileInputStream("signing.properties"))
-    props.each { key, value -> project.ext[key] = value }
-}
+    javafx {
+        version = "21.0.3"
+        modules = ['javafx.controls', 'javafx.graphics', 'javafx.base']
+    }
 
-javafx {
-    version = "12"
-    modules = [ 'javafx.controls' ]
+    dependencies {
+        implementation 'com.googlecode.json-simple:json-simple:1.1.1'
+    }
+
+    // Ensure resources (CSS, FXML, PNG) are properly included for every subproject
+    sourceSets {
+        main {
+            resources {
+                srcDirs = ['src/main/resources', 'src/main/java']
+            }
+        }
+    }
+
+    tasks.named('processResources', Copy).configure {
+        duplicatesStrategy = DuplicatesStrategy.INCLUDE
+    }
 }
 
 Date buildTimeAndDate = new Date()
@@ -57,32 +53,13 @@ ext {
     buildTime = new SimpleDateFormat('HH:mm:ss.SSSZ').format(buildTimeAndDate)
 }
 
-dependencies {
-    implementation 'com.googlecode.json-simple:json-simple:1.1.1'
-}
+// Combines outputs (classes + 40+ CSS files) from all subprojects into one single Enzo JAR
+tasks.register('oneJar', Jar) {
+    archiveBaseName = 'Enzo'
+    archiveVersion = project.version
 
-subprojects {
-    apply plugin: 'java'
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
 
-    // Configure each subproject to use Java 11
-    sourceCompatibility = '11'
-
-    // Ensure subprojects use the same repositories as the root project
-    repositories {
-        mavenCentral()
-    }
-
-    // Configure dependencies for subprojects
-    dependencies {
-        implementation 'com.googlecode.json-simple:json-simple:1.1.1'
-    }
-}
-
-// Create the main jar for the library with outputs from all subprojects
-task oneJar(type: Jar) {
-    baseName = 'Enzo'
-
-    // Include compiled classes and resources from all subprojects
     subprojects.each { subproject ->
         from subproject.sourceSets.main.output
     }
@@ -90,7 +67,7 @@ task oneJar(type: Jar) {
     manifest {
         attributes(
             'Built-By': System.properties['user.name'],
-            'Created-By': System.properties['java.version'] + " (" + System.properties['java.vendor'] + " " + System.properties['java.vm.version'] + ")",
+            'Created-By': "${System.properties['java.version']} (${System.properties['java.vendor']} ${System.properties['java.vm.version']})",
             'Build-Date': project.buildDate,
             'Build-Time': project.buildTime,
             'Specification-Title': project.name,
@@ -103,34 +80,5 @@ task oneJar(type: Jar) {
             'Bundle-SymbolicName': 'eu.hansolo.enzo',
             'Automatic-Module-Name': 'eu.hansolo.enzo'
         )
-    }
-}
-
-// create one jar for the javadoc
-tasks.register('javadocJar', Jar) {
-    dependsOn subprojects.javadoc // Ensure the Javadoc task runs for all subprojects
-    from subprojects.javadoc.destinationDir
-
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE // Handle duplicate entries
-
-    archiveClassifier.set('javadoc')
-}
-
-// create one jar for the source files
-tasks.register('sourcesJar', Jar) {
-    from subprojects.sourceSets.main.allSource
-    archiveClassifier.set('sources')
-}
-
-artifacts {
-    archives oneJar
-    archives tasks.javadocJar
-    archives tasks.sourcesJar
-}
-
-// signing the artifacts
-if (hasProperty('release')) {
-    signing {
-        sign configurations.archives
     }
 }
