@@ -26,7 +26,6 @@ javafx {
 }
 
 dependencies {
-    // Uses the Enzo JAR compiled by the buildDeps task
     implementation files('Dependencies/Enzo-0.3.6a.jar')
 }
 
@@ -34,18 +33,35 @@ application {
     mainClass = 'kutch.biff.marvin.Launcher'
 }
 
+// -----------------------------------------------------------------------------
+// Version Properties Initial Setup & Update Task
+// -----------------------------------------------------------------------------
 def versionPropsFile = file('src/main/resources/kutch/biff/marvin/version/Marvin.version.properties')
-def versionProps = new Properties()
+def initialProps = new Properties()
+
+if (versionPropsFile.exists()) {
+    versionPropsFile.withInputStream { stream -> initialProps.load(stream) }
+}
+
+// Initialize project.ext defaults so Manifest properties are ALWAYS defined
+project.ext.set('buildVersion', initialProps['Build_Version'] ?: '0')
+project.ext.set('releaseType', initialProps['Release'] ?: 'Unknown')
+project.ext.set('versionDate', initialProps['Date'] ?: 'Unknown')
+project.ext.set('buildDate', new SimpleDateFormat('yyyy-MM-dd').format(new Date()))
+project.ext.set('buildTime', new SimpleDateFormat('HH:mm:ss.SSSZ').format(new Date()))
 
 tasks.register('updateVersionProperties') {
     doLast {
         if (project.hasProperty('updateReleaseInfo')) {
             if (versionPropsFile.exists()) {
+                def versionProps = new Properties()
                 versionPropsFile.withInputStream { stream -> versionProps.load(stream) }
 
-                def buildVersion = versionProps['Build_Version'].toInteger() + 1
+                // Increment the build version
+                def buildVersion = (versionProps['Build_Version'] ?: '0').toInteger() + 1
                 versionProps['Build_Version'] = buildVersion.toString()
 
+                // Date & Time formatting
                 Date currentDate = new Date()
                 def buildDate = new SimpleDateFormat('yyyy-MM-dd').format(currentDate)
                 def buildTime = new SimpleDateFormat('HH:mm:ss.SSSZ').format(currentDate)
@@ -54,31 +70,39 @@ tasks.register('updateVersionProperties') {
                 versionProps['Month_Version'] = new SimpleDateFormat('MM').format(currentDate)
                 versionProps['Day_Version'] = new SimpleDateFormat('dd').format(currentDate)
 
+                // Debug flag
                 def isDebugBuild = project.hasProperty('debugBuild')
                 versionProps['DEBUG'] = isDebugBuild ? 'true' : 'false'
 
-                versionPropsFile.withOutputStream { stream -> versionProps.store(stream, null) }
+                // Save back to resources
+                versionPropsFile.withOutputStream { stream ->
+                    versionProps.store(stream, "Updated automatically by Gradle build")
+                }
 
+                // Update project extension properties with new values
                 project.ext.set('buildVersion', versionProps['Build_Version'])
-                project.ext.set('releaseType', versionProps['Release'])
+                project.ext.set('releaseType', versionProps['Release'] ?: 'Development')
                 project.ext.set('versionDate', versionProps['Date'])
                 project.ext.set('buildDate', buildDate)
                 project.ext.set('buildTime', buildTime)
 
-                println "Updated version properties: Build Version=${buildVersion}, Date=${versionProps['Date']}"
+                println ">> Updated version properties: Build Version=${buildVersion}, Date=${versionProps['Date']}"
             } else {
                 throw new GradleException("Version properties file not found: ${versionPropsFile}")
             }
         } else {
-            project.ext.set('buildVersion', versionProps['Build_Version'] ?: '0')
-            project.ext.set('releaseType', versionProps['Release'] ?: 'Unknown')
-            project.ext.set('versionDate', versionProps['Date'] ?: 'Unknown')
-            project.ext.set('buildDate', 'Unknown')
-            project.ext.set('buildTime', 'Unknown')
+            println ">> Skipping version properties update ('updateReleaseInfo' flag not passed)."
         }
     }
 }
 
+tasks.named('processResources').configure {
+    dependsOn tasks.named('updateVersionProperties')
+}
+
+// -----------------------------------------------------------------------------
+// Fat JAR Packaging Task
+// -----------------------------------------------------------------------------
 jar {
     dependsOn tasks.named('updateVersionProperties')
 
@@ -124,14 +148,15 @@ tasks.withType(JavaCompile).configureEach {
     options.debug = project.hasProperty('debugBuild')
 }
 
-// Task to build the Enzo library
+// -----------------------------------------------------------------------------
+// Enzo Library Tasks
+// -----------------------------------------------------------------------------
 tasks.register('buildEnzo', GradleBuild) { task ->
     println "-------- Building ENZO Library ---------"
     task.dir = file("Dependencies/Enzo")
     task.tasks = ['oneJar']
 }
 
-// Task to copy the built Enzo JAR into the Dependencies folder
 tasks.register('copyEnzoJar', Copy) {
     println "-------- Copying ENZO Library ---------"
     from 'Dependencies/Enzo/build/libs'
@@ -144,33 +169,25 @@ tasks.named('copyEnzoJar').configure {
     mustRunAfter tasks.named('buildEnzo')
 }
 
-tasks.named('build').configure {
-    dependsOn tasks.named('updateVersionProperties')
-}
-
 tasks.register('buildDeps') {
     dependsOn tasks.named('buildEnzo'), tasks.named('copyEnzoJar')
 }
 
-// Automatically run buildDeps before compilation if Enzo-0.3.6a.jar doesn't exist
+// Automatically build Enzo dependency if missing
 tasks.named('compileJava').configure {
     if (!file('Dependencies/Enzo-0.3.6a.jar').exists()) {
         dependsOn tasks.named('buildDeps')
     }
 }
-// Task to run the 'clean' task inside Dependencies/Enzo
+
+// Clean tasks
 tasks.register('cleanEnzo', GradleBuild) { task ->
     println "-------- Cleaning ENZO Library ---------"
     task.dir = file("Dependencies/Enzo")
     task.tasks = ['clean']
-    // Deletes the generated JAR in Dependencies/
-    delete file('Dependencies/Enzo-0.3.6a.jar')
 }
 
-// Hook cleanEnzo and deletion of the copied JAR into the main 'clean' task
 tasks.named('clean').configure {
     dependsOn tasks.named('cleanEnzo')
-    doLast {
-        delete file('Dependencies/Enzo-0.3.6a.jar')
-    }
+    delete file('Dependencies/Enzo-0.3.6a.jar')
 }
