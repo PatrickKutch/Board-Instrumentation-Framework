@@ -151,3 +151,26 @@ tasks.named('build').configure {
 tasks.register('buildDeps') {
     dependsOn tasks.named('buildEnzo'), tasks.named('copyEnzoJar')
 }
+
+// Automatically run buildDeps before compilation if Enzo-0.3.6a.jar doesn't exist
+tasks.named('compileJava').configure {
+    if (!file('Dependencies/Enzo-0.3.6a.jar').exists()) {
+        dependsOn tasks.named('buildDeps')
+    }
+}
+// Task to run the 'clean' task inside Dependencies/Enzo
+tasks.register('cleanEnzo', GradleBuild) { task ->
+    println "-------- Cleaning ENZO Library ---------"
+    task.dir = file("Dependencies/Enzo")
+    task.tasks = ['clean']
+    // Deletes the generated JAR in Dependencies/
+    delete file('Dependencies/Enzo-0.3.6a.jar')
+}
+
+// Hook cleanEnzo and deletion of the copied JAR into the main 'clean' task
+tasks.named('clean').configure {
+    dependsOn tasks.named('cleanEnzo')
+    doLast {
+        delete file('Dependencies/Enzo-0.3.6a.jar')
+    }
+}
