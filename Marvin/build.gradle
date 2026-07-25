@@ -191,3 +191,46 @@ tasks.named('clean').configure {
     dependsOn tasks.named('cleanEnzo')
     delete file('Dependencies/Enzo-0.3.6a.jar')
 }
+
+// -----------------------------------------------------------------------------
+// Native Windows Executable (.exe) Task
+// -----------------------------------------------------------------------------
+tasks.register('buildExe', Exec) {
+    dependsOn tasks.named('jar')
+
+    group = 'distribution'
+    description = 'Generates a standalone Windows application with Marvin.exe'
+
+    def outputDir = layout.buildDirectory.dir("dist").get().asFile
+    def inputJarDir = layout.buildDirectory.dir("libs").get().asFile
+    def iconFile = file('src/main/resources/kutch/biff/marvin/images/Marvin.ico')
+
+    doFirst {
+        delete outputDir
+    }
+
+    def javaHome = System.getProperty('java.home')
+    def jpackageExec = new File(javaHome, 'bin/jpackage.exe').exists() ? 
+                       new File(javaHome, 'bin/jpackage.exe').absolutePath : 'jpackage'
+
+    def jpackageArgs = [
+        jpackageExec,
+        '--type', 'app-image',
+        '--dest', outputDir.absolutePath,
+        '--name', 'Marvin',
+        '--vendor', 'Patrick Kutch',                           // Sets the Publisher name
+        '--copyright', 'Copyright © 2026 Patrick Kutch',      // Sets Copyright
+        '--description', 'Board Instrumentation Framework',   // Sets File Description
+        '--app-version', "${project.ext.buildVersion}.0",     // Sets Version
+        '--input', inputJarDir.absolutePath,
+        '--main-jar', 'BIFF.Marvin.jar',
+        '--main-class', application.mainClass.get(),
+        '--win-console'
+    ]
+
+    if (iconFile.exists()) {
+        jpackageArgs.addAll(['--icon', iconFile.absolutePath])
+    }
+
+    commandLine jpackageArgs
+}
