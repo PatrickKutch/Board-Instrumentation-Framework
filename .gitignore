@@ -15,8 +15,8 @@
 /oscar/oscar.sln
 /oscar/oscar.v12.suo
 /Marvin/${store.dir}/
-
 bin/
 .gradle
 .idea
 out
+Marvin/Dependencies/Enzo-0.3.6a.jar
